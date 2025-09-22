@@ -1,4 +1,4 @@
-/*
+/**
  * 更新日期：2024-04-05 15:30:15
  * 用法：Sub-Store 脚本操作添加
  * rename.js 以下是此脚本支持的参数，必须以 # 为开头多个参数使用"&"连接，参考上述地址为例使用参数。 禁用缓存url#noCache
@@ -97,22 +97,27 @@ const keyb =
 const rurekey = {
   GB: /UK/g,
   "B-G-P": /BGP/g,
-  "I-E-P-L": /IEPL/gi,
-  "I-P-L-C": /IPLC/gi,
   "Russia Moscow": /Moscow/g,
   "Korea Chuncheon": /Chuncheon|Seoul/g,
   "Hong Kong": /Hongkong|HONG KONG/gi,
   "United Kingdom London": /London|Great Britain/g,
-  "Taiwan TW 台湾 ": /(台|Tai\s?wan|TW).*?|.*?(台|Tai\s?wan|TW)/g,
+  "Dubai United Arab Emirates": /United Arab Emirates/g,
+  "Taiwan TW 台湾 🇹🇼": /(台|Tai\s?wan|TW).*?🇨🇳|🇨🇳.*?(台|Tai\s?wan|TW)/g,
   "United States": /USA|Los Angeles|San Jose|Silicon Valley|Michigan/g,
   澳大利亚: /澳洲|墨尔本|悉尼|土澳|(深|沪|呼|京|广|杭)澳/g,
-  德国: /(深|沪|呼|京|广|杭)德|法兰克福|滬德/g,
-  香港: /(深|沪|呼|京|广|杭)港/g,
+  德国: /(深|沪|呼|京|广|杭)德(?!.*(I|线))|法兰克福|滬德/g,
+  香港: /(深|沪|呼|京|广|杭)港(?!.*(I|线))/g,
+  日本: /(深|沪|呼|京|广|杭|中|辽)日(?!.*(I|线))|东京|大坂/g,
+  新加坡: /狮城|(深|沪|呼|京|广|杭)新/g,
+  美国: /(深|沪|呼|京|广|杭)美|波特兰|芝加哥|哥伦布|纽约|硅谷|俄勒冈|西雅图|芝加哥/g,
+  波斯尼亚和黑塞哥维那: /波黑共和国/g,
+  印尼: /印度尼西亚|雅加达/g,
+  印度: /孟买/g,
+  阿联酋: /迪拜|阿拉伯联合酋长国/g,
+  孟加拉国: /孟加拉/g,
+  捷克: /捷克共和国/g,
   台湾: /新台|新北|台(?!.*线)/g,
   Taiwan: /Taipei/g,
-  日本: /(深|沪|呼|京|广|杭|中|辽)日|东京|大坂/g,
-  新加坡: /狮城|(深|沪|呼|京|广|杭)新/g,
-  美国: /(深|沪|呼|京|广|杭)美|波特兰|芝加哥|哥伦布|纽约|硅谷|俄勒冈|西雅图|拉斯维加斯|凤凰城/g,
   韩国: /春川|韩|首尔/g,
   Japan: /Tokyo|Osaka/g,
   英国: /伦敦/g,
@@ -123,16 +128,8 @@ const rurekey = {
   土耳其: /伊斯坦布尔/g,
   泰国: /泰國|曼谷/g,
   法国: /巴黎/g,
-  波斯尼亚和黑塞哥维那: /波黑共和国/g,
-  印尼: /印度尼西亚|雅加达/g,
-  印度: /孟买/g,
-  孟加拉国: /孟加拉/g,
-  捷克: /捷克共和国/g,
-  阿联酋: /(阿联酋|迪拜|UAE|United\s*Arab\s*Emirates|Dubai)/gi,
-  沙特阿拉伯: /(沙特|沙特阿拉伯|Saudi\s*Arabia|KSA|\bSTC\b)/gi,
-  家宽: /家庭宽带|家庭|住宅/g,
   G: /\d\s?GB/gi,
-  Esnc: /esnc/gi
+  Esnc: /esnc/gi,
 };
 
 let GetK = false, AMK = []
@@ -241,7 +238,7 @@ function operator(pro) {
     // 正则 匹配倍率
     if (bl) {
       const match = e.name.match(
-        /((倍率|X|x|×)\D?((\d{1,3}\.)\d+)\D?)|((\d{1,3}\.)\d+)(倍|X|x|×)/
+        /((倍率|X|x|×)\D?((\d{1,3}\.)?\d+)\D?)|((\d{1,3}\.)?\d+)(倍|X|x|×)/
       );
       if (match) {
         const rev = match[0].match(/(\d[\d.]*)/)[0];
