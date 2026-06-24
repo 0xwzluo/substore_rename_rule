@@ -8,11 +8,11 @@
  * 5) 过滤空键，避免 "" 命中一切
  * 6) ✅ 清理信息节点 clear 默认开启（可通过 clear=false 关闭）
  * 7) ✅ boolArg 修复：把空字符串/空白当作“未传入”，默认值不被错误覆盖
- * 8) ✅ ++功能增强：新增参数ipapi（参数格式：策略参数[,在线ip查询api地址,解析结果取值jsonpath表达式]，支持指定ip查询api策略,可通过在线api查询proxy ip所属国家/地区，默认关闭，支持对未匹配部分节点启用、对所有节点启用。策略参数说明：
+ * 8) ✅ ++功能增强：新增参数ipapi（参数格式：策略参数[,在线ip查询api地址,解析结果取值jsonpath表达式]），支持指定ip查询api策略,可通过在线api查询proxy ip/域名所属国家/地区，默认关闭，支持对对名称未匹配到归属地区的节点启用、对所有节点启用。策略参数说明：
  *       关闭：off/留空/其它文本，示例：off  ->  ipapi=off
- *       对名称未匹配到属地策略的节点启用：nm/on，此时nm参数无效，示例：nm,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=nm%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code
- *       对所有节点启用：all，此时nm参数无效，并且会覆盖通过名称匹配到国家/地区的，示例：all,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=all%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code
- 
+ *       对名称未匹配到归属地区的节点启用：nm/on，此时nm参数无效，示例：nm,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=nm%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code
+ *       对所有节点启用：all，此时nm参数无效，并且会覆盖通过名称匹配到的国家/地区，示例：all,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=all%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code 
+ *       *更新：使用第三方模块deasync模块优化同步操作，使用前需命令安装(npm install deasync)
  */  
 
 const inArg = $arguments;
@@ -59,7 +59,7 @@ const FGF = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
       outputName = nameMap[inArg.out] || "",
       ipapi = resolveIpApiConfigObject(inArg.ipapi || "");
 
-  console.log("ipapi配置信息："+inArg.ipapi)
+  console.info("配置参数信息："+inArg);
 
 // ==================== 数据表 ====================
 // prettier-ignore
@@ -210,9 +210,12 @@ function operator(pro) {
   const BLKEYS = BLKEY ? BLKEY.split("+") : "";
 
   // new feature:ipapi预处理
-  console.log("ipapi配置信息："+ipapi)
-  prerenameProxysByIpRegion(ipapi,pro);
-
+  console.info("ipapi配置信息："+ipapi)
+  if(ipapi.strategy=="all"){
+    renameProxysByIpRegion(ipapi,pro)
+  }
+  // new feature:ipapi后处理节点列表
+  let postList = [];
   pro.forEach((e) => {
     let bktf = false, ens = e.name; // ens: 原始名称（本轮处理前）
     // 预处理（归一化 + 可选 BLKEY 附加到显示）
@@ -293,16 +296,19 @@ function operator(pro) {
       e.name = keyover.join(FGF);
     } else {
       //未匹配到地区，判断是否要通过ipapi查询
-      if (nm||ipapi.strategy=="on") {
-        if(ipapi.strategy=="on"){
-          renameProxyByIpRegion(ipapi,e);
-        }
+      if (ipapi.strategy=="on") {
+        postList.push(e);
+      } else if (nm) {
         e.name = FNAME + FGF + e.name; 
       } else {
         e.name = null;
       }
     }
   });
+  //ipapi后处理
+  if(postList.length){
+    renameProxysByIpRegion(ipapi,e);
+  }
 
   pro = pro.filter((e) => e.name !== null);
   jxh(pro);
@@ -359,7 +365,7 @@ function fampx(pro){
 }
 
 
-const childProcess = require("child_process"); //使用子进程模块
+//const childProcess = require("child_process"); //使用子进程模块
 //const workThreads = require("worker_threads"); //使用多线程模块
 const regionCaches={}; //缓存对象
 function resolveIpApiConfigObject(ipApiparam){
@@ -370,8 +376,14 @@ function resolveIpApiConfigObject(ipApiparam){
     return {
         "jsonpath":ipApiparam.pop()||"",
         "apiUrl":ipApiparam.pop()||"",
-        "strategy":ipApiparam.pop()||"off"
+        "strategy":valIf((a,b)=>a=="nm","on",ipApiparam.pop()||"off")
     };
+}
+function valIf(conditionFunc,valIfTrue,valIfFalse){
+  if(conditionFunc(valIfTrue,valIfFalse)){
+    return valIfTrue;
+  }
+  return valIfFalse;
 }
 function saveCache(key,value){
     //更新缓存
@@ -395,36 +407,49 @@ function validDomain(host){
     //域名格式检查
     return /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(host);
 }
-function retriveIpv4(nsPost){
-    //ipv4串提取
-    return nsPost.match(/(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g).pop();
+//异步转同步模块
+const deasync = require("deasync");
+function awaitSync(promise) {
+  // 等待promise异步结果同步返回
+  let done = false;
+  let result, error;
+  promise.then(
+    (val) => { result = val; done = true; },
+    (err) => { error = err; done = true; }
+  );
+  // deasync 在后台跑事件循环，不阻塞主线程
+  const spin = deasync(function (cb) {
+    const check = () => {
+      if (done) return cb(null);
+      setImmediate(check); // 让出线程，等事件循环推进
+    };
+    check();
+  });
+  spin(); // 阻塞直到 cb 被调用
+
+  if (error) throw error;
+  return result;
 }
-function curlGet(url){
+const dns = require("node:dns/promises"); // 使用 Promise 版本的 dns 模块
+async function asyncResolveDomain(domain) {
     try {
-        //使用系统命令curl发送请求
-        return childProcess.execSync(`curl ${url}`).toString('utf-8');
-    } catch (error) {
-        console.error("curl执行失败:", error.message);
-        return "";
-    }
-}
-function resolveDomain(domain) {
-    try {
-        // 使用系统命令nslookup解析domain为ip
-        return retriveIpv4(childProcess.execSync(`nslookup ${domain}`).toString('utf-8'));
+        // 使用dns.lookup模块解析domain为ip(异步)
+        const result = await dns.lookup(domain);
+        console.info(`域名 ${domain} 的 IP 是:${result.address}`);
+        return result.address;
     } catch (error) {
         console.error("域名解析失败:", error.message);
         return "";
     }
 }
-function ensureIp(host){
+async function ensureIp(host){
     //确保ip格式，如果是域名，则将域名解析为ip
     if(validDomain(host)){
-        return resolveDomain(host);
+        return await asyncResolveDomain(host);
     }
     return host;
 }
-function resolveHostRegion(host,apiurl,ipvalPattern) {
+async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
     try {
         //host格式检查
         host=host.trim();
@@ -434,43 +459,42 @@ function resolveHostRegion(host,apiurl,ipvalPattern) {
             return cache;
         }
         let originHost = host;
-        host = ensureIp(host);
+        //域名转ip
+        host=await ensureIp(host);
+        //ip格式检查
         if(!validIp(host)){
-            console.error("非法ip串：", host);
+            console.error("非法的ip串：", host);
             return "";
         }
         apiurl=apiurl.replace("${ip}",host);
-        object = JSON.parse(curlGet(apiurl));
-        let regionResult = valueOfPath(object,ipvalPattern.trim().substring(2).split(".").reverse());
+        const response = await fetch(apiurl);
+        // 检查请求是否成功
+        if (!response.ok) {
+            console.error(`HTTP 错误！状态码：${response.status}`);
+            return "";
+        }
+        // 根据jsonpath表达式解析JSON对象字段值
+        const data = await response.json();
+        console.info("获取的响应数据：", data);
+        const regionResult = valueOfPath(data,ipvalPattern.trim().substring(2).split(".").reverse());
         saveCache(originHost,regionResult);
         return regionResult;
     } catch (error) {
-        console.error("数据请求失败：", error.message);
+        console.error("ip数据请求失败：", error.message);
         return "";
     }
 }
-
-function renameProxyByIpRegion(ipapiConfig,proxy) {
+function renameProxysByIpRegion(ipapiConfig,proxys) {
     //重命名处理
     try {
-        const regionName = resolveHostRegion(proxy.server,ipapiConfig.apiUrl,ipapiConfig.jsonpath);
-        console.log(`解析到节点区域:${regionName}`);
-        regionName && (proxy.name=regionName);
-    } catch (error) {
-        console.error(`节点[${proxy.name || proxy.server}]预重命名处理失败：${error.message}`);
-    }
-    return proxy;
-}
-
-
-function prerenameProxysByIpRegion(ipapiConfig,proxys) {
-    //预先重命名处理
-    try {
-        if(ipapiConfig.strategy=="all"){
-            console.log(`节点处理strategy:${ipapiConfig.strategy}`);
-            proxys.forEach(x => {
-                renameProxyByIpRegion(ipapiConfig,x);
-            });
+        if(ipapiConfig.strategy=="all" || ipapiConfig.strategy=="on"){
+            console.info(`节点处理strategy:${ipapiConfig.strategy}`);
+            promises = proxys?.map(x=>asyncResolveHostRegion(x.server,ipapiConfig.apiUrl,ipapiConfig.jsonpath));
+            p0=Promise.all(promises);
+            let result = awaitSync(p0);
+            for(i = 0;i<result?.length;i++){
+              result[i] && (proxys[i].name=FNAME + FGF + result[i])
+            }
         }
     } catch (error) {
         console.error("预先重命名处理失败：", error.message);
