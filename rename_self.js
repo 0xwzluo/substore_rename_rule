@@ -450,6 +450,7 @@ async function ensureIp(host){
 }
 async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
     try {
+        console.info("开始处理：", host);
         //host格式检查
         host=host.trim();
         //优化：先查cache，命中则不再查询
@@ -490,7 +491,9 @@ function renameProxysByIpRegion(ipapiConfig,proxys) {
             console.info(`节点处理strategy:${ipapiConfig.strategy}`);
             promises = proxys?.map(x=>asyncResolveHostRegion(x.server,ipapiConfig.apiUrl,ipapiConfig.jsonpath));
             p0=Promise.all(promises);
+            console.info(`异步任务已提交，等待响应...`);
             let result = awaitSync(p0);
+            console.info(`异步任务处理完成.`);
             for(i = 0;i<result?.length;i++){
               result[i] && (proxys[i].name=FNAME + FGF + result[i])
             }
