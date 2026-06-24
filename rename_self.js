@@ -455,28 +455,35 @@ async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
         host=host.trim();
         //优化：先查cache，命中则不再查询
         let cache = getCache(host);
+        console.info("找到cache：", cache);
         if(cache){
             return cache;
         }
         let originHost = host;
         //域名转ip
+        console.info("域名转ip操作:", host);
         host=await ensureIp(host);
+        console.info("域名转ip操作完成:", host);
         //ip格式检查
         if(!validIp(host)){
             console.error("非法的ip串：", host);
             return "";
         }
         apiurl=apiurl.replace("${ip}",host);
+        console.info("ipapi调用:", host);
         const response = await fetch(apiurl);
+        console.info("resp完成:host=", host);
         // 检查请求是否成功
         if (!response.ok) {
             console.error(`HTTP 错误！状态码：${response.status}`);
             return "";
         }
         // 根据jsonpath表达式解析JSON对象字段值
+        console.info("开始获取响应json数据:host=", host);
         const data = await response.json();
         console.info("获取的响应数据：", data);
         const regionResult = valueOfPath(data,ipvalPattern.trim().substring(2).split(".").reverse());
+        console.info("host=",host,"regionResult=", regionResult);
         saveCache(originHost,regionResult);
         return regionResult;
     } catch (error) {
