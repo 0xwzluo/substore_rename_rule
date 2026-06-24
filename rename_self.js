@@ -59,7 +59,7 @@ const FGF = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
       outputName = nameMap[inArg.out] || "",
       ipapi = resolveIpApiConfigObject(inArg.ipapi || "");
 
-  console.info("配置参数信息："+inArg);
+  console.info("配置参数信息："+JSON.stringify(inArg));
 
 // ==================== 数据表 ====================
 // prettier-ignore
@@ -307,9 +307,8 @@ function operator(pro) {
   });
   //ipapi后处理
   if(postList.length){
-    renameProxysByIpRegion(ipapi,e);
+    renameProxysByIpRegion(ipapi,postList);
   }
-
   pro = pro.filter((e) => e.name !== null);
   jxh(pro);
   if (numone) oneP(pro);
