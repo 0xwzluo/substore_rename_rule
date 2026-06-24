@@ -210,7 +210,7 @@ function operator(pro) {
   const BLKEYS = BLKEY ? BLKEY.split("+") : "";
 
   // new feature:ipapi预处理
-  console.info("ipapi配置信息："+ipapi)
+  console.info("ipapi配置信息："+JSON.stringify(ipapi));
   if(ipapi.strategy=="all"){
     renameProxysByIpRegion(ipapi,pro)
   }
