@@ -29,7 +29,23 @@ function boolArg(v, d = false) {
   }
   return !!v;
 }
-
+function resolveIpApiConfigObject(ipApiparam){
+    if(!ipApiparam){
+        return {"strategy":"off"}
+    }
+    ipApiparam=decodeURIComponent(ipApiparam.trim()).trim().split(",");
+    return {
+        "jsonpath":ipApiparam.pop()||"",
+        "apiUrl":ipApiparam.pop()||"",
+        "strategy":ifv((a,b)=>a=="nm","on",ipApiparam.pop()||"off")
+    };
+}
+function ifv(conditionFunc,valIfTrue,valIfFalse){
+  if(conditionFunc(valIfTrue,valIfFalse)){
+    return valIfTrue;
+  }
+  return valIfFalse;
+}
 const nx     = boolArg(inArg.nx, false),
       bl     = boolArg(inArg.bl, false),
       nf     = boolArg(inArg.nf, false),
@@ -367,23 +383,6 @@ function fampx(pro){
 //const childProcess = require("child_process"); //使用子进程模块
 //const workThreads = require("worker_threads"); //使用多线程模块
 const regionCaches={}; //缓存对象
-function resolveIpApiConfigObject(ipApiparam){
-    if(!ipApiparam){
-        return {"strategy":"off"}
-    }
-    ipApiparam=decodeURIComponent(ipApiparam.trim()).trim().split(",");
-    return {
-        "jsonpath":ipApiparam.pop()||"",
-        "apiUrl":ipApiparam.pop()||"",
-        "strategy":valIf((a,b)=>a=="nm","on",ipApiparam.pop()||"off")
-    };
-}
-function valIf(conditionFunc,valIfTrue,valIfFalse){
-  if(conditionFunc(valIfTrue,valIfFalse)){
-    return valIfTrue;
-  }
-  return valIfFalse;
-}
 function saveCache(key,value){
     //更新缓存
     prev = regionCaches[key];
