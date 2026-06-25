@@ -433,6 +433,7 @@ const dns = require("node:dns/promises"); // 使用 Promise 版本的 dns 模块
 async function asyncResolveDomain(domain) {
     try {
         // 使用dns.lookup模块解析domain为ip(异步)
+        console.info(`开始域名解析:${domain}`);
         const result = await dns.lookup(domain);
         console.info(`域名 ${domain} 的 IP 是:${result.address}`);
         return result.address;
