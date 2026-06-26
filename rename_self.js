@@ -16,6 +16,7 @@
  */  
 
 const inArg = $arguments;
+console.info("配置参数信息：",inArg);
 
 // —— 布尔参数解析辅助（修复：把空字符串当作“未传入”） —— //
 function boolArg(v, d = false) {
@@ -37,14 +38,17 @@ function resolveIpApiConfigObject(ipApiparam){
     return {
         "jsonpath":ipApiparam.pop()||"",
         "apiUrl":ipApiparam.pop()||"",
-        "strategy":ifv((a,b)=>a=="nm","on",ipApiparam.pop()||"off")
+        "strategy":ifv(ipApiparam.pop()||"off",x=>x=="nm","on")
     };
 }
-function ifv(conditionFunc,valIfTrue,valIfFalse){
-  if(conditionFunc(valIfTrue,valIfFalse)){
-    return valIfTrue;
+function ifv(originVal,condition,valIfConditionTrue,...otherConditions){
+  if(!(condition instanceof Function)){
+    return originVal;
   }
-  return valIfFalse;
+  if(condition(originVal)){
+    return valIfConditionTrue;
+  }
+  return ifv(originVal,...otherConditions);
 }
 const nx     = boolArg(inArg.nx, false),
       bl     = boolArg(inArg.bl, false),
@@ -74,8 +78,7 @@ const FGF = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
       inname = nameMap[inArg.in] || "",
       outputName = nameMap[inArg.out] || "",
       ipapi = resolveIpApiConfigObject(inArg.ipapi || "");
-
-  console.info("配置参数信息："+JSON.stringify(inArg));
+console.info("ipapi配置参数信息：",ipapi);
 
 // ==================== 数据表 ====================
 // prettier-ignore
@@ -226,7 +229,6 @@ function operator(pro) {
   const BLKEYS = BLKEY ? BLKEY.split("+") : "";
 
   // new feature:ipapi预处理
-  console.info("ipapi配置信息："+JSON.stringify(ipapi));
   if(ipapi.strategy=="all"){
     renameProxysByIpRegion(ipapi,pro)
   }
@@ -380,7 +382,15 @@ function fampx(pro){
 }
 
 
-//const childProcess = require("child_process"); //使用子进程模块
+const childProcess = require("child_process"); //使用子进程模块
+function run(cmd, options = {}) {
+  return new Promise((resolve, reject) => {
+    childProcess.exec(cmd, options, (err, stdout, stderr) => {
+      if (err) reject(err);
+      else resolve(stdout.trim());
+    });
+  });
+}
 //const workThreads = require("worker_threads"); //使用多线程模块
 const regionCaches={}; //缓存对象
 function saveCache(key,value){
@@ -393,10 +403,6 @@ function getCache(key){
     //获取缓存
     return regionCaches[key];
 }
-function valueOfPath(jsonObject,arr){
-    //jsonpath值提取
-    return arr&&arr.length?valueOfPath(jsonObject[arr.pop()],arr):jsonObject;
-}
 function validIp(host){
     //ip格式检查
     return /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(host);
@@ -404,6 +410,18 @@ function validIp(host){
 function validDomain(host){
     //域名格式检查
     return /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(host);
+}
+function retriveIpv4(text){
+    //ipv4串提取
+    return text.match(/(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g)?.pop();
+}
+function valueOfPath(jsonObject,pathArr){
+    //jsonpath值提取
+    return pathArr?.length?valueOfPath(jsonObject[pathArr.pop()],pathArr):jsonObject;
+}
+function retriveJsonPathVal(json,jsonpath){
+    //ipv4串提取
+    return valueOfPath(JSON.parse(json),jsonpath.trim().substring(2).split(".").reverse());
 }
 //异步转同步模块
 const deasync = require("deasync");
@@ -424,18 +442,19 @@ function awaitSync(promise) {
     check();
   });
   spin(); // 阻塞直到 cb 被调用
-
   if (error) throw error;
   return result;
 }
-const dns = require("node:dns/promises"); // 使用 Promise 版本的 dns 模块
+//const dns = require("node:dns/promises"); // 使用 Promise 版本的 dns 模块
 async function asyncResolveDomain(domain) {
     try {
         // 使用dns.lookup模块解析domain为ip(异步)
         console.info(`开始域名解析:${domain}`);
-        const result = await dns.lookup(domain);
-        console.info(`域名 ${domain} 的 IP 是:${result.address}`);
-        return result.address;
+        // const result = await dns.lookup(domain);
+        //使用系统nslookup命令
+        const result = await run(`nslookup ${domain}`).then(retriveIpv4);
+        console.info(`域名 ${domain} 的 IP 是:${result}`);
+        return result;
     } catch (error) {
         console.error("域名解析失败:", error.message);
         return "";
@@ -470,22 +489,23 @@ async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
             return "";
         }
         apiurl=apiurl.replace("${ip}",host);
-        console.info("ipapi调用:", host);
-        const response = await fetch(apiurl);
-        console.info("resp完成:host=", host);
+        console.info("ipapi调用:curl ", host);
+        // const response = await fetch(apiurl);
+        const response = await run(`curl ${apiurl}`).then(r=>retriveJsonPathVal(r,ipvalPattern));
+        console.info("resp完成:host=", host,"response=",response);
         // 检查请求是否成功
-        if (!response.ok) {
-            console.error(`HTTP 错误！状态码：${response.status}`);
-            return "";
-        }
+        // if (!response.ok) {
+        //     console.error(`HTTP 错误！状态码：${response.status}`);
+        //     return "";
+        // }
         // 根据jsonpath表达式解析JSON对象字段值
-        console.info("开始获取响应json数据:host=", host);
-        const data = await response.json();
-        console.info("获取的响应数据：", data);
-        const regionResult = valueOfPath(data,ipvalPattern.trim().substring(2).split(".").reverse());
-        console.info("host=",host,"regionResult=", regionResult);
-        saveCache(originHost,regionResult);
-        return regionResult;
+        // console.info("开始获取响应json数据:host=", host);
+        // const data = await response.json();
+        // console.info("获取的响应数据：", data);
+        // const regionResult = valueOfPath(data,ipvalPattern.trim().substring(2).split(".").reverse());
+        // console.info("host=",host,"regionResult=", regionResult);
+        saveCache(originHost,response);
+        return response;
     } catch (error) {
         console.error("ip数据请求失败：", error.message);
         return "";
