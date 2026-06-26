@@ -12,7 +12,7 @@
  *       关闭：off/留空/其它文本，示例：off  ->  ipapi=off
  *       对名称未匹配到归属地区的节点启用：nm/on，此时nm参数无效，示例：nm,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=nm%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code
  *       对所有节点启用：all，此时nm参数无效，并且会覆盖通过名称匹配到的国家/地区，示例：all,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=all%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code 
- *       *更新：使用第三方模块deasync模块优化同步操作，使用前需命令安装(npm install deasync)
+ *       *更新：使用第三方模块geoip-lite模块进行ip地理信息查询操作，使用前需命令安装(npm install geoip-lite)
  */  
 
 const inArg = $arguments;
@@ -423,45 +423,8 @@ function retriveJsonPathVal(json,jsonpath){
     //ipv4串提取
     return valueOfPath(JSON.parse(json),jsonpath.trim().substring(2).split(".").reverse());
 }
-//异步转同步模块
-const deasync = require("deasync");
-function awaitSync(promise) {
-  let done = false;
-  let result, error;
-  // 1. 正常挂载 Promise 回调
-  promise.then(
-    (val) => { result = val; done = true; },
-    (err) => { error = err; done = true; }
-  );
-  // 2. 阻塞主线程，直到 done 变为 true
-  // loopWhile 会在后台安全地驱动事件循环，允许 Promise 微任务执行
-  deasync.loopWhile(() => !done);
-  if (error) throw error;
-  return result;
-}
-//const dns = require("node:dns/promises"); // 使用 Promise 版本的 dns 模块
-async function asyncResolveDomain(domain) {
-    try {
-        // 使用dns.lookup模块解析domain为ip(异步)
-        console.info(`开始域名解析:${domain}`);
-        // const result = await dns.lookup(domain);
-        //使用系统nslookup命令
-        const result = await run(`nslookup ${domain}`).then(retriveIpv4);
-        console.info(`域名 ${domain} 的 IP 是:${result}`);
-        return result;
-    } catch (error) {
-        console.error("域名解析失败:", error.message);
-        return "";
-    }
-}
-async function ensureIp(host){
-    //确保ip格式，如果是域名，则将域名解析为ip
-    if(validDomain(host)){
-        return await asyncResolveDomain(host);
-    }
-    return host;
-}
-async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
+const geoip = require('geoip-lite');
+function resolveHostRegion(host,apiurl,ipvalPattern) {
     try {
         console.info("开始处理：", host);
         //host格式检查
@@ -474,19 +437,20 @@ async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
         }
         let originHost = host;
         //域名转ip
-        console.info("域名转ip操作:", host);
-        host=await ensureIp(host);
-        console.info("域名转ip操作完成:", host);
+        // console.info("域名转ip操作:", host);
+        // host=await ensureIp(host);
+        // console.info("域名转ip操作完成:", host);
         //ip格式检查
         if(!validIp(host)){
             console.error("非法的ip串：", host);
             return "";
         }
-        apiurl=apiurl.replace("${ip}",host);
-        console.info("ipapi调用:curl ", host);
+        // apiurl=apiurl.replace("${ip}",host);
+        // console.info("ipapi调用:curl ", host);
         // const response = await fetch(apiurl);
-        const response = await run(`curl ${apiurl}`).then(r=>retriveJsonPathVal(r,ipvalPattern));
-        console.info("resp完成:host=", host,"response=",response);
+        // const response = await run(`curl ${apiurl}`).then(r=>retriveJsonPathVal(r,ipvalPattern));
+        const location = geoip.lookup("154.211.8.18");
+        console.info("resp完成:host=", host,"location=",location);
         // 检查请求是否成功
         // if (!response.ok) {
         //     console.error(`HTTP 错误！状态码：${response.status}`);
@@ -498,8 +462,8 @@ async function asyncResolveHostRegion(host,apiurl,ipvalPattern) {
         // console.info("获取的响应数据：", data);
         // const regionResult = valueOfPath(data,ipvalPattern.trim().substring(2).split(".").reverse());
         // console.info("host=",host,"regionResult=", regionResult);
-        saveCache(originHost,response);
-        return response;
+        saveCache(originHost,location?.country);
+        return location?.country;
     } catch (error) {
         console.error("ip数据请求失败：", error.message);
         return "";
@@ -510,17 +474,22 @@ function renameProxysByIpRegion(ipapiConfig,proxys) {
     try {
         if(ipapiConfig.strategy=="all" || ipapiConfig.strategy=="on"){
             console.info(`节点处理strategy:${ipapiConfig.strategy}`);
-            promises = proxys?.map(x=>asyncResolveHostRegion(x.server,ipapiConfig.apiUrl,ipapiConfig.jsonpath));
-            p0=Promise.all(promises);
-            console.info(`异步任务已提交，等待响应...`);
-            let result = awaitSync(p0);
-            console.info(`异步任务处理完成.`);
-            for(i = 0;i<result?.length;i++){
-              result[i] && (proxys[i].name=FNAME + FGF + result[i])
-            }
+            // promises = proxys?.map(x=>asyncResolveHostRegion(x.server,ipapiConfig.apiUrl,ipapiConfig.jsonpath));
+            // p0=Promise.all(promises);
+            // console.info(`异步任务已提交，等待响应...`);
+            // let result = awaitSync(p0);
+            // console.info(`异步任务处理完成.`);
+            // for(i = 0;i<result?.length;i++){
+            //   result[i] && (proxys[i].name=FNAME + FGF + result[i])
+            // }
+            proxys?.forEach(x=>{
+              let result = resolveHostRegion(x.server);
+              console.info(`name=${x.name},host=${x.server},region=${result}.`);
+              result && (x.name=FNAME + FGF + result);
+            });
         }
     } catch (error) {
-        console.error("预先重命名处理失败：", error.message);
+        console.error("重命名处理失败：", error.message);
     }
     return proxys;
 }
