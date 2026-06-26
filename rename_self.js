@@ -8,7 +8,7 @@
  * 5) 过滤空键，避免 "" 命中一切
  * 6) ✅ 清理信息节点 clear 默认开启（可通过 clear=false 关闭）
  * 7) ✅ boolArg 修复：把空字符串/空白当作“未传入”，默认值不被错误覆盖
- * 8) ✅ ++功能增强：新增参数ipapi（参数格式：策略参数[,在线ip查询api地址,解析结果取值jsonpath表达式]），支持指定ip查询api策略,可通过在线api查询proxy ip/域名所属国家/地区，默认关闭，支持对对名称未匹配到归属地区的节点启用、对所有节点启用。策略参数说明：
+ * 8) ✅ ++功能增强：新增参数ipapi（参数格式：策略参数[,在线ip查询api地址,解析结果取值jsonpath表达式]），支持指定ip查询api策略,可通过在线api查询proxy ip所属国家/地区，默认关闭，支持对对名称未匹配到归属地区的节点启用、对所有节点启用。策略参数说明：
  *       关闭：off/留空/其它文本，示例：off  ->  ipapi=off
  *       对名称未匹配到归属地区的节点启用：nm/on，此时nm参数无效，示例：nm,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=nm%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code
  *       对所有节点启用：all，此时nm参数无效，并且会覆盖通过名称匹配到的国家/地区，示例：all,https://api.ip2location.io/?ip=${ip},$.country_code  ->  ipapi=all%2Chttps%3A%2F%2Fapi.ip2location.io%2F%3Fip%3D%24%7Bip%7D%2C%24.country_code 
@@ -391,7 +391,6 @@ function run(cmd, options = {}) {
     });
   });
 }
-//const workThreads = require("worker_threads"); //使用多线程模块
 const regionCaches={}; //缓存对象
 function saveCache(key,value){
     //更新缓存
@@ -431,37 +430,18 @@ function resolveHostRegion(host,apiurl,ipvalPattern) {
         host=host.trim();
         //优化：先查cache，命中则不再查询
         let cache = getCache(host);
-        console.info("找到cache：", cache);
         if(cache){
-            return cache;
+          console.info("找到cache：", cache);
+          return cache;
         }
         let originHost = host;
-        //域名转ip
-        // console.info("域名转ip操作:", host);
-        // host=await ensureIp(host);
-        // console.info("域名转ip操作完成:", host);
         //ip格式检查
         if(!validIp(host)){
-            console.error("非法的ip串：", host);
-            return "";
+          console.error("非法的ip串：", host);
+          return "";
         }
-        // apiurl=apiurl.replace("${ip}",host);
-        // console.info("ipapi调用:curl ", host);
-        // const response = await fetch(apiurl);
-        // const response = await run(`curl ${apiurl}`).then(r=>retriveJsonPathVal(r,ipvalPattern));
-        const location = geoip.lookup("154.211.8.18");
+        const location = geoip.lookup(host);
         console.info("resp完成:host=", host,"location=",location);
-        // 检查请求是否成功
-        // if (!response.ok) {
-        //     console.error(`HTTP 错误！状态码：${response.status}`);
-        //     return "";
-        // }
-        // 根据jsonpath表达式解析JSON对象字段值
-        // console.info("开始获取响应json数据:host=", host);
-        // const data = await response.json();
-        // console.info("获取的响应数据：", data);
-        // const regionResult = valueOfPath(data,ipvalPattern.trim().substring(2).split(".").reverse());
-        // console.info("host=",host,"regionResult=", regionResult);
         saveCache(originHost,location?.country);
         return location?.country;
     } catch (error) {
@@ -472,16 +452,8 @@ function resolveHostRegion(host,apiurl,ipvalPattern) {
 function renameProxysByIpRegion(ipapiConfig,proxys) {
     //重命名处理
     try {
+        console.info(`节点处理strategy:${ipapiConfig.strategy}`);
         if(ipapiConfig.strategy=="all" || ipapiConfig.strategy=="on"){
-            console.info(`节点处理strategy:${ipapiConfig.strategy}`);
-            // promises = proxys?.map(x=>asyncResolveHostRegion(x.server,ipapiConfig.apiUrl,ipapiConfig.jsonpath));
-            // p0=Promise.all(promises);
-            // console.info(`异步任务已提交，等待响应...`);
-            // let result = awaitSync(p0);
-            // console.info(`异步任务处理完成.`);
-            // for(i = 0;i<result?.length;i++){
-            //   result[i] && (proxys[i].name=FNAME + FGF + result[i])
-            // }
             proxys?.forEach(x=>{
               let result = resolveHostRegion(x.server);
               console.info(`name=${x.name},host=${x.server},region=${result}.`);
